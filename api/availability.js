@@ -2,21 +2,26 @@ const BANNERS={
   albertsons:{host:'www.albertsons.com',header:'albertsons'},
   tomthumb:{host:'www.tomthumb.com',header:'tomthumb'},
   randalls:{host:'www.randalls.com',header:'randalls'},
-  united:{host:'www.unitedsupermarkets.com',header:'unitedsupermarkets'}
+  united:{host:'www.unitedsupermarkets.com',header:'unitedsupermarkets'},
+  marketstreet:{host:'www.marketstreetunited.com',header:'marketstreet'}
 };
 
 const PUBLIC_WEB_SEARCH_KEY='e914eec9448c4d5eb672debf5011cf8f';
+const norm=v=>String(v??'').replace(/\D/g,'');
 
 export default async function handler(req,res){
-  res.setHeader('Cache-Control','s-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Cache-Control','s-maxage=120, stale-while-revalidate=300');
   const banner=String(req.query.banner||'albertsons').toLowerCase();
   const storeId=String(req.query.storeId||req.query.storeid||'').trim();
   const q=String(req.query.q||'').trim();
-  const rows=Math.min(Math.max(Number(req.query.rows)||10,1),25);
+  const productId=String(req.query.productId||req.query.pid||'').trim();
+  const upc=String(req.query.upc||'').trim();
+  const rows=Math.min(Math.max(Number(req.query.rows)||25,1),50);
   const cfg=BANNERS[banner];
   if(!cfg)return res.status(400).json({ok:false,error:'Unsupported banner',supported:Object.keys(BANNERS)});
-  if(!storeId||!q)return res.status(400).json({ok:false,error:'storeId and q are required'});
+  if(!storeId||(!q&&!productId&&!upc))return res.status(400).json({ok:false,error:'storeId and one of q, productId, or upc are required'});
 
+  const searchTerm=productId||upc||q;
   const base=`https://${cfg.host}`;
   const u=new URL(`${base}/abs/pub/xapi/search/substitute`);
   const p={
@@ -30,7 +35,7 @@ export default async function handler(req,res){
     storeid:storeId,
     featured:'true',
     'search-uid':'',
-    q,
+    q:searchTerm,
     channel:'pickup',
     banner:cfg.header
   };
@@ -62,7 +67,11 @@ export default async function handler(req,res){
       inventoryAvailable:x.inventoryAvailable??x.inventory??null,
       available:String(x.inventoryAvailable??x.inventory??'')==='1'
     })):[];
-    return res.status(200).json({ok:true,banner,storeId,q,count:results.length,results});
+
+    const targetPid=norm(productId),targetUpc=norm(upc);
+    const exact=results.filter(x=>(targetPid&&norm(x.pid)===targetPid)||(targetUpc&&norm(x.upc)===targetUpc));
+    const matched=(productId||upc)?exact:results;
+    return res.status(200).json({ok:true,banner,storeId,query:searchTerm,requested:{productId:productId||null,upc:upc||null,q:q||null},count:results.length,exactCount:exact.length,results,matched});
   }catch(e){
     return res.status(502).json({ok:false,error:'Availability request failed',detail:e?.message||String(e)});
   }
