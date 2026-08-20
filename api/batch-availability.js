@@ -3,7 +3,7 @@ const BANNERS={albertsons:{host:'www.albertsons.com',header:'albertsons'},tomthu
 async function checkOne(cfg,storeId,productId){
   const base=`https://${cfg.host}`;
   const u=new URL(`${base}/abs/pub/xapi/product/v2/pdpdata`);
-  const p={bpn:productId,banner:cfg.header,storeId,bannerId:'6',includeProductRating:'true',realTimeReviewRating:'true',guest:'false',includeOffer:'true',pgm:'abs',hhid:'961068400479'};
+  const p={bpn:productId,banner:cfg.header,storeId,bannerId:'6',includeProductRating:'true',realTimeReviewRating:'true',guest:'true',includeOffer:'true',pgm:'abs'};
   Object.entries(p).forEach(([k,v])=>u.searchParams.set(k,v));
   const r=await fetch(u,{headers:{Accept:'application/json',Referer:`${base}/shop/product-details.${productId}.html`,'User-Agent':'Mozilla/5.0 (compatible; Albertsons-InStock-Command-Center/1.0)','x-swy-banner':cfg.header,'x-swy-client-id':'web-portal'}});
   const text=await r.text();
@@ -29,7 +29,8 @@ export default async function handler(req,res){
     const found=results.filter(x=>x.found);
     const available=found.filter(x=>x.available).length;
     const unavailable=found.filter(x=>x.found&&!x.available).length;
+    const unknown=results.filter(x=>!x.found||!x.ok).length;
     const inStockPct=found.length?Math.round(available/found.length*1000)/10:null;
-    return res.status(200).json({ok:true,banner,storeId,requested:products.length,found:found.length,available,unavailable,inStockPct,results});
+    return res.status(200).json({ok:true,banner,storeId,requested:products.length,found:found.length,available,unavailable,unknown,inStockPct,results});
   }catch(e){return res.status(502).json({ok:false,error:'Batch availability request failed',detail:e?.message||String(e)})}
 }
